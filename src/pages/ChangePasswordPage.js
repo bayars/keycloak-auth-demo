@@ -81,7 +81,7 @@ const ChangePasswordPage = () => {
     setLoading(true);
 
     try {
-      const result = await changePassword(oldPassword, newPassword);
+      const result = await changePassword(oldPassword, newPassword, confirmPassword);
       
       if (result.success) {
         setSuccess(true);

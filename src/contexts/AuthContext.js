@@ -112,11 +112,13 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const changePassword = async (oldPassword, newPassword) => {
+  const changePassword = async (oldPassword, newPassword, confirmPassword) => {
     try {
       await axios.post('/api/change-password', {
+        username: user.username,
         old_password: oldPassword,
-        new_password: newPassword
+        new_password: newPassword,
+        confirm_password: confirmPassword
       });
       
       // Update user to remove must_change_password flag
