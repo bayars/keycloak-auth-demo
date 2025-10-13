@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Login Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 600px; margin: 0 auto; }
+        button { padding: 10px 20px; margin: 10px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        #result { background: #f8f9fa; padding: 15px; border-radius: 4px; margin: 10px 0; white-space: pre-wrap; }
+        .form-group { margin: 10px 0; }
+        input { padding: 8px; margin: 5px; border: 1px solid #ddd; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Debug Login Test</h1>
+        <p>This page helps debug the login flow. Open browser console (F12) to see detailed logs.</p>
+        
+        <div class="form-group">
+            <label>Username:</label>
+            <input type="text" id="username" value="admin" />
+        </div>
+        
+        <div class="form-group">
+            <label>Password:</label>
+            <input type="password" id="password" value="admin" />
+        </div>
+        
+        <button onclick="testLogin()">🔐 Test Login</button>
+        <button onclick="testUserInfo()">👤 Test User Info</button>
+        <button onclick="clearResult()">🗑️ Clear</button>
+        
+        <div id="result"></div>
+        
+        <h3>📋 Instructions:</h3>
+        <ol>
+            <li>Open browser console (F12 → Console tab)</li>
+            <li>Click "Test Login" button</li>
+            <li>Watch console logs to see what's happening</li>
+            <li>Check if <code>must_change_password</code> is <code>true</code></li>
+            <li>Try accessing the main app: <a href="/" target="_blank">https://lab-test2.safa.nisvcg.comp.net</a></li>
+        </ol>
+    </div>
+
+    <script>
+        function log(message) {
+            console.log(message);
+            const result = document.getElementById('result');
+            result.textContent += new Date().toLocaleTimeString() + ': ' + message + '\n';
+        }
+
+        async function testLogin() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            log('🔐 Testing login with: ' + username + '/' + password);
+            
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        username: username,
+                        password: password
+                    })
+                });
+                
+                const data = await response.json();
+                log('✅ Login response: ' + JSON.stringify(data, null, 2));
+                
+                if (data.access_token) {
+                    localStorage.setItem('access_token', data.access_token);
+                    log('💾 Token saved to localStorage');
+                }
+                
+            } catch (error) {
+                log('❌ Login error: ' + error.message);
+            }
+        }
+
+        async function testUserInfo() {
+            const token = localStorage.getItem('access_token');
+            if (!token) {
+                log('❌ No token found. Please login first.');
+                return;
+            }
+            
+            log('👤 Testing user info with token...');
+            
+            try {
+                const response = await fetch('/api/user/me', {
+                    headers: {
+                        'Authorization': 'Bearer ' + token
+                    }
+                });
+                
+                const data = await response.json();
+                log('✅ User info: ' + JSON.stringify(data, null, 2));
+                
+            } catch (error) {
+                log('❌ User info error: ' + error.message);
+            }
+        }
+
+        function clearResult() {
+            document.getElementById('result').textContent = '';
+        }
+
+        // Auto-test on page load
+        window.onload = function() {
+            log('🚀 Debug page loaded. Ready to test!');
+        };
+    </script>
+</body>
+</html>
