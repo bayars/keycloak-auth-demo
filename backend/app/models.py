@@ -13,8 +13,10 @@ class LoginResponse(BaseModel):
     must_change_password: bool = False
 
 class ChangePasswordRequest(BaseModel):
+    username: str
     old_password: str
     new_password: str
+    confirm_password: str
 
 class UserInfo(BaseModel):
     username: str

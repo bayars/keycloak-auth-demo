@@ -49,6 +49,8 @@ const PasswordChangeRoute = ({ children }) => {
   const { isAuthenticated, loading, user } = useAuth();
   
   console.log('DEBUG PasswordChangeRoute:', { isAuthenticated, loading, user });
+  console.log('DEBUG PasswordChangeRoute - user.must_change_password:', user?.must_change_password);
+  console.log('DEBUG PasswordChangeRoute - isAuthenticated calculation:', !!user && (!!user.token || user?.must_change_password));
   
   if (loading) {
     console.log('DEBUG: Still loading, showing spinner');

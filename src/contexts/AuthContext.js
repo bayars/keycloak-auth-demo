@@ -66,10 +66,27 @@ export const AuthProvider = ({ children }) => {
       
       const { access_token, roles, must_change_password } = response.data;
       
+      // If must_change_password is true, we don't have a valid token yet
+      if (must_change_password) {
+        // Create a minimal user object for password change flow
+        const userData = {
+          username: username,
+          must_change_password: true,
+          roles: roles || []
+        };
+        console.log('DEBUG: Setting user data for password change:', userData);
+        console.log('DEBUG: About to set user state...');
+        setUser(userData);
+        console.log('DEBUG: User state set, returning success');
+        return { success: true, must_change_password: true };
+      }
+      
+      // Only proceed with token and user info if password change is not required
       setToken(access_token);
       localStorage.setItem('access_token', access_token);
       axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
       
+      console.log('DEBUG: Token set, calling /api/user/me');
       // Get user info
       const userResponse = await axios.get('/api/user/me');
       const userData = {
@@ -129,7 +146,7 @@ export const AuthProvider = ({ children }) => {
     login,
     changePassword,
     logout,
-    isAuthenticated: !!token && !!user,
+    isAuthenticated: !!user && (!!token || user.must_change_password),
     isAdmin: user?.roles?.includes('admin') || false
   };
 
