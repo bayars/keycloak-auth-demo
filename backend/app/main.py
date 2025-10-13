@@ -156,6 +156,7 @@ async def change_password(request: ChangePasswordRequest):
                 )
             
             users = users_response.json()
+            print(f"DEBUG: Found {len(users)} users for username '{request.username}'")
             if not users:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
@@ -164,36 +165,51 @@ async def change_password(request: ChangePasswordRequest):
             
             user = users[0]  # Get the first (and should be only) user
             user_id = user["id"]
+            print(f"DEBUG: User ID: {user_id}")
             
-            # Verify the old password by attempting to authenticate
-            # This is a bit tricky since we can't directly verify password
-            # We'll try to authenticate with the old password
-            try:
-                verify_response = await client.post(
-                    f"{settings.keycloak_url}/realms/{settings.keycloak_realm}/protocol/openid-connect/token",
-                    data={
-                        "client_id": settings.client_id,
-                        "grant_type": "password",
-                        "username": request.username,
-                        "password": request.old_password,
-                        "scope": "openid profile email roles"
-                    }
-                )
+            # Check if user has required actions (like UPDATE_PASSWORD)
+            # If they do, we can skip password verification since the login endpoint
+            # already confirmed the password is correct by returning must_change_password: true
+            user_response = await client.get(
+                f"{settings.keycloak_url}/admin/realms/{settings.keycloak_realm}/users/{user_id}",
+                headers={"Authorization": f"Bearer {admin_token}"}
+            )
+            
+            if user_response.status_code == 200:
+                user_data = user_response.json()
+                required_actions = user_data.get("requiredActions", [])
+                print(f"DEBUG: User required actions: {required_actions}")
                 
-                # If we get a 401, it means the password is wrong
-                if verify_response.status_code == 401:
-                    raise HTTPException(
-                        status_code=status.HTTP_401_UNAUTHORIZED,
-                        detail="Invalid old password"
-                    )
-                
-                # If we get any other error, it might be due to required actions
-                # In that case, we'll proceed with the password change
-                
-            except Exception as e:
-                # If verification fails, we'll still try to change the password
-                # This handles cases where the user has required actions
-                pass
+                # If user has UPDATE_PASSWORD required action, skip password verification
+                # since the login endpoint already confirmed the password is correct
+                if "UPDATE_PASSWORD" not in required_actions:
+                    print("DEBUG: No UPDATE_PASSWORD required action, verifying password")
+                    # Only verify password if no required actions
+                    try:
+                        verify_response = await client.post(
+                            f"{settings.keycloak_url}/realms/{settings.keycloak_realm}/protocol/openid-connect/token",
+                            data={
+                                "client_id": settings.client_id,
+                                "grant_type": "password",
+                                "username": request.username,
+                                "password": request.old_password,
+                                "scope": "openid profile email roles"
+                            }
+                        )
+                        
+                        # If we get a 401, it means the password is wrong
+                        if verify_response.status_code == 401:
+                            raise HTTPException(
+                                status_code=status.HTTP_401_UNAUTHORIZED,
+                                detail="Invalid old password"
+                            )
+                    except Exception as e:
+                        raise HTTPException(
+                            status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="Invalid old password"
+                        )
+                else:
+                    print("DEBUG: UPDATE_PASSWORD required action found, skipping password verification")
         
         # Update password via Keycloak Admin API
         async with httpx.AsyncClient() as client:

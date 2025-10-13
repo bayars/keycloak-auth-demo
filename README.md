@@ -1,155 +1,144 @@
-# Keycloak Authentication GUI
+# Keycloak Authentication System - Quick Start Guide
 
-A React-based frontend application for the Keycloak authentication system with Material-UI components.
+This is a complete Keycloak authentication system with HAProxy, FastAPI backend, and React frontend.
 
-## Features
+## 🚀 Quick Deployment
 
-- **Login Page**: Authenticate with Keycloak using username/password
-- **Password Change Page**: Force admin users to change their default password
-- **Dashboard Page**: Admin dashboard with Keycloak console access
-- **Material-UI Design**: Modern, responsive UI components
-- **JWT Authentication**: Secure token-based authentication
-- **Role-based Access**: Admin and user role management
-
-## Pages
-
-### 1. Login Page (`/login`)
-- Clean login form with Material-UI components
-- Default admin credentials display
-- Error handling and loading states
-- Redirects to password change or dashboard based on user state
-
-### 2. Password Change Page (`/change-password`)
-- Required for admin users with temporary passwords
-- Password strength validation
-- Password visibility toggles
-- Success confirmation with auto-redirect
-
-### 3. Dashboard Page (`/dashboard`)
-- Welcome message with user information
-- Role-based access indicators
-- Keycloak console access button (admin only)
-- User management section (admin only)
-- System information display
-
-## Architecture
-
-```
-Client Browser
-    ↓
-HAProxy (Port 443)
-    ├── /auth/* → Keycloak Admin (admin role required)
-    ├── /api/* → Backend API (JWT validation)
-    ├── /static/* → Frontend Assets
-    ├── /* → Frontend Application
-    ↓
-React Frontend (Port 3000)
-```
-
-## Setup Instructions
-
-### 1. Build and Start Services
+### Option 1: Automated Deployment (Recommended)
 
 ```bash
-# Build and start all services
-docker-compose up -d --build
+# Clone the repository
+git clone <repository-url>
+cd keycloak-auth-demo
 
-# Check logs
-docker-compose logs -f
+# Deploy with your domain
+./deploy.sh your-domain.com
 
-# Verify services
-docker-compose ps
+# Or deploy with localhost for testing
+./deploy.sh localhost
 ```
 
-### 2. Access the Application
-
-- **Frontend**: https://lab-test2.safa.nisvcg.comp.net
-- **Keycloak Console**: https://lab-test2.safa.nisvcg.comp.net/auth (admin only)
-- **API Health**: https://lab-test2.safa.nisvcg.comp.net/health
-- **HAProxy Stats**: http://localhost:8404/stats
-
-### 3. Default Credentials
-
-- **Username**: admin
-- **Password**: admin
-
-## Development
-
-### Local Development
+### Option 2: Manual Deployment
 
 ```bash
-# Install dependencies
-npm install
+# 1. Generate SSL certificates
+./scripts/generate-certs.sh your-domain.com
 
-# Start development server
-npm start
+# 2. Start services
+docker compose up -d
 
-# Build for production
-npm run build
+# 3. Setup Keycloak
+./setup-keycloak.sh
 ```
 
-### Docker Development
+## 📋 What Gets Deployed
 
+- **HAProxy**: SSL termination, JWT validation, load balancing
+- **Keycloak**: Authentication and authorization server
+- **FastAPI Backend**: REST API with Keycloak integration
+- **React Frontend**: Material-UI based web application
+- **PostgreSQL**: Database for Keycloak
+
+## 🌐 Access Points
+
+After deployment, you can access:
+
+- **Main Application**: `https://your-domain.com`
+- **Keycloak Admin Console**: `https://your-domain.com/auth/admin/master/console/`
+- **HAProxy Stats**: `https://your-domain.com:8404/stats`
+
+## 👤 Default Users
+
+The system creates these users automatically:
+
+- **Admin User**: `admin` / `admin` (role: admin)
+- **Test User**: `ben` / `ben` (role: user)
+
+Both users have `UPDATE_PASSWORD` required action, so they'll be prompted to change their password on first login.
+
+## 🔧 Management Scripts
+
+### User Management
 ```bash
-# Build frontend image
-docker build -t keycloak-gui ./gui
+# Create a new user
+./scripts/user-management.sh create john secret123 admin
 
-# Run with docker-compose
-docker-compose up frontend
+# List all users
+./scripts/user-management.sh list
+
+# Reset user password
+./scripts/user-management.sh reset-password admin newpassword
+
+# Assign role to user
+./scripts/user-management.sh assign-role john user
 ```
 
-## API Integration
+### Realm Export/Import
+```bash
+# Export current realm configuration
+./export-realm.sh
 
-The frontend communicates with the backend API through the following endpoints:
-
-- `POST /api/login` - User authentication
-- `POST /api/change-password` - Password change
-- `GET /api/user/me` - Current user info
-- `GET /api/dashboard` - Dashboard data
-- `GET /api/admin/users` - User management (admin only)
-
-## Authentication Flow
-
-1. **Login**: User enters credentials → API validates with Keycloak → Returns JWT token
-2. **Password Change**: If `must_change_password` is true → Force password update
-3. **Dashboard**: Display user info and admin features based on roles
-4. **Keycloak Access**: Admin users can access `/auth` for Keycloak management
-
-## Security Features
-
-- JWT token validation
-- Role-based access control
-- Password strength requirements
-- Secure cookie handling
-- HTTPS enforcement
-- CORS configuration
-
-## Technologies Used
-
-- **React 18** - Frontend framework
-- **Material-UI 5** - UI component library
-- **React Router 6** - Client-side routing
-- **Axios** - HTTP client
-- **Docker** - Containerization
-- **HAProxy** - Load balancer and SSL termination
-
-## File Structure
-
+# Import realm configuration (on another system)
+./exports/YYYYMMDD_HHMMSS/import-realm.sh
 ```
-gui/
-├── public/
-│   ├── index.html
-│   └── manifest.json
-├── src/
-│   ├── contexts/
-│   │   └── AuthContext.js
-│   ├── pages/
-│   │   ├── LoginPage.js
-│   │   ├── ChangePasswordPage.js
-│   │   └── DashboardPage.js
-│   ├── App.js
-│   └── index.js
-├── Dockerfile
-├── package.json
-└── docker-compose.yml
+
+### SSL Certificates
+```bash
+# Generate new certificates
+./scripts/generate-certs.sh your-domain.com
+
+# Generate certificates with custom settings
+./scripts/generate-certs.sh your-domain.com --days 730 --key-size 2048
 ```
+
+## 🔍 Troubleshooting
+
+### Check Service Status
+```bash
+docker compose ps
+docker compose logs -f
+```
+
+### Common Issues
+
+1. **SSL Certificate Errors**
+   ```bash
+   ./scripts/generate-certs.sh your-domain.com
+   ```
+
+2. **Keycloak Not Starting**
+   ```bash
+   docker logs keycloak
+   docker compose restart keycloak
+   ```
+
+3. **Frontend Not Loading**
+   ```bash
+   docker logs keycloak-gui
+   docker compose build frontend --no-cache
+   ```
+
+## 📚 Documentation
+
+- **Complete Guide**: See `DEPLOYMENT_GUIDE.md` for detailed instructions
+- **API Documentation**: Available at `https://your-domain.com/docs` (after deployment)
+- **Keycloak Documentation**: [Official Keycloak Docs](https://www.keycloak.org/documentation)
+
+## 🔒 Security Notes
+
+- Change default passwords immediately after deployment
+- Use trusted SSL certificates for production
+- Configure firewall rules appropriately
+- Enable MFA for admin users in production
+
+## 📞 Support
+
+For issues and questions:
+1. Check the troubleshooting section
+2. Review the logs
+3. Check the GitHub issues
+4. Contact the development team
+
+## 📄 License
+
+This project is licensed under the MIT License.
