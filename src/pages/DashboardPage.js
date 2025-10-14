@@ -59,8 +59,15 @@ const DashboardPage = () => {
 
   const handleKeycloakAccess = () => {
     // Keycloak admin console requires direct access with master realm admin credentials
-    // The JWT token from our app won't work for Keycloak admin console
-    window.open('/auth', '_blank');
+    // Open in a new window with a fresh authentication context
+    const keycloakUrl = `${window.location.origin}/auth/`;
+    
+    // Create a new window and navigate to Keycloak admin console
+    const newWindow = window.open('', '_blank');
+    if (newWindow) {
+      // Clear any existing authentication context
+      newWindow.location.href = keycloakUrl;
+    }
   };
 
   const fetchUsers = async () => {
@@ -157,7 +164,14 @@ const DashboardPage = () => {
             <Typography variant="body1" color="text.secondary" paragraph>
               As an admin user, you can access the Keycloak administration console to manage users, 
               roles, and other security settings. The Keycloak console requires separate authentication 
-              with the master realm admin credentials (admin/admin).
+              with master realm admin credentials.
+            </Typography>
+            <Typography variant="body2" color="text.secondary" paragraph>
+              <strong>Admin Console Access:</strong><br />
+              • URL: <code>/auth/</code><br />
+              • Username: <code>realm-admin</code> or <code>admin</code><br />
+              • Password: <code>admin</code><br />
+              • Note: Opens in a new window with fresh authentication context
             </Typography>
             
             {isAdmin ? (

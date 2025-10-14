@@ -37,10 +37,13 @@ async def login(credentials: LoginRequest):
     Login endpoint - authenticates with Keycloak and returns JWT tokens
     """
     try:
-        async with httpx.AsyncClient() as client:
+        token_url = f"{settings.keycloak_url}/realms/{settings.keycloak_realm}/protocol/openid-connect/token"
+        print(f"DEBUG: Attempting to connect to Keycloak at: {token_url}")
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
             # Request token from Keycloak
             response = await client.post(
-                f"{settings.keycloak_url}/realms/{settings.keycloak_realm}/protocol/openid-connect/token",
+                token_url,
                 data={
                     "client_id": settings.client_id,
                     "grant_type": "password",
@@ -49,6 +52,7 @@ async def login(credentials: LoginRequest):
                     "scope": "openid profile email roles"
                 }
             )
+            print(f"DEBUG: Keycloak response status: {response.status_code}")
             
             if response.status_code != 200:
                 error_data = response.json()
@@ -125,6 +129,8 @@ async def login(credentials: LoginRequest):
             )
             
     except httpx.HTTPError as e:
+        print(f"DEBUG: httpx.HTTPError caught in login: {str(e)}")
+        print(f"DEBUG: Exception type: {type(e)}")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"Keycloak service unavailable: {str(e)}"
