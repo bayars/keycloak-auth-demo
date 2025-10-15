@@ -1,0 +1,285 @@
+name: API Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: "3.12"
+  KEYCLOAK_URL: "http://localhost:8080/auth"
+  KEYCLOAK_REALM: "test-realm"
+  CLIENT_ID: "test-client"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.11"]
+    
+    services:
+      keycloak:
+        image: quay.io/keycloak/keycloak:latest
+        ports:
+          - 8080:8080
+        env:
+          KEYCLOAK_ADMIN: admin
+          KEYCLOAK_ADMIN_PASSWORD: admin
+        options: >-
+          --health-cmd "curl -f http://localhost:8080/auth/realms/master || exit 1"
+          --health-interval 30s
+          --health-timeout 10s
+          --health-retries 5
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('backend/pyproject.toml') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Install dependencies
+      run: |
+        cd backend
+        python -m pip install --upgrade pip
+        pip install -e .[test]
+
+    - name: Wait for Keycloak to be ready
+      run: |
+        timeout 300 bash -c 'until curl -f http://localhost:8080/auth/realms/master; do sleep 5; done'
+
+    - name: Setup Keycloak test realm
+      run: |
+        # Wait a bit more for Keycloak to fully initialize
+        sleep 30
+        
+        # Get admin token
+        ADMIN_TOKEN=$(curl -s -X POST http://localhost:8080/auth/realms/master/protocol/openid-connect/token \
+          -H "Content-Type: application/x-www-form-urlencoded" \
+          -d "username=admin" \
+          -d "password=admin" \
+          -d "grant_type=password" \
+          -d "client_id=admin-cli" | jq -r '.access_token')
+        
+        # Create test realm
+        curl -s -X POST http://localhost:8080/auth/admin/realms \
+          -H "Authorization: Bearer $ADMIN_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d '{
+            "realm": "test-realm",
+            "enabled": true,
+            "displayName": "Test Realm"
+          }'
+        
+        # Create test client
+        curl -s -X POST http://localhost:8080/auth/admin/realms/test-realm/clients \
+          -H "Authorization: Bearer $ADMIN_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d '{
+            "clientId": "test-client",
+            "enabled": true,
+            "publicClient": true,
+            "redirectUris": ["http://localhost:3000/*"],
+            "webOrigins": ["http://localhost:3000"]
+          }'
+        
+        # Create test user
+        curl -s -X POST http://localhost:8080/auth/admin/realms/test-realm/users \
+          -H "Authorization: Bearer $ADMIN_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d '{
+            "username": "testuser",
+            "enabled": true,
+            "emailVerified": true,
+            "firstName": "Test",
+            "lastName": "User",
+            "email": "test@example.com",
+            "credentials": [{
+              "type": "password",
+              "value": "testpass",
+              "temporary": false
+            }]
+          }'
+        
+        # Create admin user
+        curl -s -X POST http://localhost:8080/auth/admin/realms/test-realm/users \
+          -H "Authorization: Bearer $ADMIN_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d '{
+            "username": "admin",
+            "enabled": true,
+            "emailVerified": true,
+            "firstName": "Admin",
+            "lastName": "User",
+            "email": "admin@example.com",
+            "credentials": [{
+              "type": "password",
+              "value": "adminpass",
+              "temporary": false
+            }]
+          }'
+        
+        # Create admin role
+        curl -s -X POST http://localhost:8080/auth/admin/realms/test-realm/roles \
+          -H "Authorization: Bearer $ADMIN_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d '{
+            "name": "admin",
+            "description": "Admin role"
+          }'
+        
+        # Assign admin role to admin user
+        USER_ID=$(curl -s -X GET http://localhost:8080/auth/admin/realms/test-realm/users?username=admin \
+          -H "Authorization: Bearer $ADMIN_TOKEN" | jq -r '.[0].id')
+        
+        ROLE_ID=$(curl -s -X GET http://localhost:8080/auth/admin/realms/test-realm/roles/admin \
+          -H "Authorization: Bearer $ADMIN_TOKEN" | jq -r '.id')
+        
+        curl -s -X POST http://localhost:8080/auth/admin/realms/test-realm/users/$USER_ID/role-mappings/realm \
+          -H "Authorization: Bearer $ADMIN_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d "[{\"id\":\"$ROLE_ID\",\"name\":\"admin\"}]"
+
+    - name: Run unit tests
+      run: |
+        cd backend
+        python -m pytest tests/unit/ -v --tb=short --cov=app --cov-report=xml -m unit
+
+    - name: Run integration tests
+      run: |
+        cd backend
+        python -m pytest tests/integration/ -v --tb=short --cov=app --cov-report=xml -m integration
+
+    - name: Run all tests with coverage
+      run: |
+        cd backend
+        python -m pytest tests/ -v --tb=short --cov=app --cov-report=xml --cov-report=html
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./backend/coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+
+    - name: Upload test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: test-results-${{ matrix.python-version }}
+        path: |
+          backend/coverage.xml
+          backend/htmlcov/
+          backend/.coverage
+
+  lint:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install dependencies
+      run: |
+        cd backend
+        python -m pip install --upgrade pip
+        pip install -e .[test]
+        pip install flake8 black isort mypy
+
+    - name: Run flake8
+      run: |
+        cd backend
+        flake8 app/ tests/ --count --select=E9,F63,F7,F82 --show-source --statistics
+
+    - name: Run black
+      run: |
+        cd backend
+        black --check app/ tests/
+
+    - name: Run isort
+      run: |
+        cd backend
+        isort --check-only app/ tests/
+
+    - name: Run mypy
+      run: |
+        cd backend
+        mypy app/ --ignore-missing-imports
+
+  security:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install dependencies
+      run: |
+        cd backend
+        python -m pip install --upgrade pip
+        pip install -e .[test]
+        pip install safety bandit
+
+    - name: Run safety check
+      run: |
+        cd backend
+        safety check
+
+    - name: Run bandit security check
+      run: |
+        cd backend
+        bandit -r app/ -f json -o bandit-report.json || true
+
+    - name: Upload security report
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: security-report
+        path: backend/bandit-report.json
+
+  docker-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build backend Docker image
+      run: |
+        cd backend
+        docker build -t lab-test2-api:test .
+
+    - name: Test Docker image
+      run: |
+        cd backend
+        docker run --rm -d --name test-api -p 8000:8000 lab-test2-api:test
+        sleep 10
+        curl -f http://localhost:8000/health || exit 1
+        docker stop test-api

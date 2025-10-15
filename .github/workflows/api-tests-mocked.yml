@@ -1,0 +1,172 @@
+name: API Tests (Mocked)
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.11"]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('backend/pyproject.toml') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Install dependencies
+      run: |
+        cd backend
+        python -m pip install --upgrade pip
+        pip install -e .[test]
+
+    - name: Run unit tests
+      run: |
+        cd backend
+        python -m pytest tests/unit/ -v --tb=short --cov=app --cov-report=xml -m unit
+
+    - name: Run integration tests (mocked)
+      run: |
+        cd backend
+        python -m pytest tests/integration/ -v --tb=short --cov=app --cov-report=xml -m integration
+
+    - name: Run all tests with coverage
+      run: |
+        cd backend
+        python -m pytest tests/ -v --tb=short --cov=app --cov-report=xml --cov-report=html
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./backend/coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+
+    - name: Upload test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: test-results-${{ matrix.python-version }}
+        path: |
+          backend/coverage.xml
+          backend/htmlcov/
+          backend/.coverage
+
+  lint:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install dependencies
+      run: |
+        cd backend
+        python -m pip install --upgrade pip
+        pip install -e .[test]
+        pip install flake8 black isort mypy
+
+    - name: Run flake8
+      run: |
+        cd backend
+        flake8 app/ tests/ --count --select=E9,F63,F7,F82 --show-source --statistics
+
+    - name: Run black
+      run: |
+        cd backend
+        black --check app/ tests/
+
+    - name: Run isort
+      run: |
+        cd backend
+        isort --check-only app/ tests/
+
+    - name: Run mypy
+      run: |
+        cd backend
+        mypy app/ --ignore-missing-imports
+
+  security:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install dependencies
+      run: |
+        cd backend
+        python -m pip install --upgrade pip
+        pip install -e .[test]
+        pip install safety bandit
+
+    - name: Run safety check
+      run: |
+        cd backend
+        safety check
+
+    - name: Run bandit security check
+      run: |
+        cd backend
+        bandit -r app/ -f json -o bandit-report.json || true
+
+    - name: Upload security report
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: security-report
+        path: backend/bandit-report.json
+
+  docker-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build backend Docker image
+      run: |
+        cd backend
+        docker build -t lab-test2-api:test .
+
+    - name: Test Docker image
+      run: |
+        cd backend
+        docker run --rm -d --name test-api -p 8000:8000 lab-test2-api:test
+        sleep 10
+        curl -f http://localhost:8000/health || exit 1
+        docker stop test-api
