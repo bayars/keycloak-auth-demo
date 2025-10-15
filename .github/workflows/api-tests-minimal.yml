@@ -1,0 +1,67 @@
+name: API Tests (Minimal)
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.12"
+
+    - name: Install dependencies
+      run: |
+        cd backend
+        python -m pip install --upgrade pip
+        pip install pytest pytest-cov fastapi httpx python-jose pydantic
+
+    - name: Run basic test
+      run: |
+        cd backend
+        python -c "
+        import sys
+        import os
+        sys.path.insert(0, '.')
+        
+        # Test basic imports
+        try:
+            from app.main import app
+            print('✅ Successfully imported app.main')
+        except Exception as e:
+            print(f'❌ Failed to import app.main: {e}')
+            sys.exit(1)
+        
+        # Test FastAPI app
+        try:
+            from fastapi.testclient import TestClient
+            client = TestClient(app)
+            response = client.get('/health')
+            assert response.status_code == 200
+            print('✅ Health endpoint working')
+        except Exception as e:
+            print(f'❌ Health endpoint failed: {e}')
+            sys.exit(1)
+        
+        print('✅ All basic tests passed!')
+        "
+
+    - name: Run pytest with explicit path
+      run: |
+        cd backend
+        PYTHONPATH=. python -m pytest tests/test_basic.py -v
+
+    - name: Run simple API test
+      run: |
+        cd backend
+        python test_simple.py
