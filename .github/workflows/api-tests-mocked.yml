@@ -40,23 +40,10 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
-    - name: Run unit tests
+    - name: Run working tests
       run: |
         cd backend
-        export PYTHONPATH="${PYTHONPATH}:$(pwd)"
-        python -m pytest tests/unit/test_simple_api.py -v --tb=short --cov=app --cov-report=xml
-
-    - name: Run integration tests (mocked)
-      run: |
-        cd backend
-        export PYTHONPATH="${PYTHONPATH}:$(pwd)"
-        python -m pytest tests/integration/test_simple_integration.py -v --tb=short --cov=app --cov-report=xml
-
-    - name: Run all tests with coverage
-      run: |
-        cd backend
-        export PYTHONPATH="${PYTHONPATH}:$(pwd)"
-        python -m pytest tests/unit/test_simple_api.py tests/integration/test_simple_integration.py -v --tb=short --cov=app --cov-report=xml --cov-report=html
+        python run_tests.py
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3

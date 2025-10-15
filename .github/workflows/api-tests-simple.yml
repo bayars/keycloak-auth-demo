@@ -43,8 +43,7 @@ jobs:
     - name: Run working tests
       run: |
         cd backend
-        export PYTHONPATH="${PYTHONPATH}:$(pwd)"
-        python -m pytest tests/unit/test_simple_api.py tests/integration/test_simple_integration.py -v --tb=short --cov=app --cov-report=xml --cov-report=html
+        python run_tests.py
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
