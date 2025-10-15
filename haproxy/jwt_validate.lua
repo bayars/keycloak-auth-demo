@@ -21,11 +21,13 @@ function validate_admin_jwt(txn)
     local auth_header = txn.sf:req_fhdr("authorization")
     
     if not auth_header or not auth_header:match("^Bearer ") then
+        txn:set_var("txn.is_admin", "false")
         return false
     end
     
     local token = auth_header:match("Bearer (.+)")
     if not token then
+        txn:set_var("txn.is_admin", "false")
         return false
     end
     
@@ -36,6 +38,7 @@ function validate_admin_jwt(txn)
     end
     
     if #parts ~= 3 then
+        txn:set_var("txn.is_admin", "false")
         return false
     end
     
@@ -44,12 +47,14 @@ function validate_admin_jwt(txn)
     local payload_json = base64url_decode(payload_encoded)
     
     if not payload_json then
+        txn:set_var("txn.is_admin", "false")
         return false
     end
     
     -- Parse JSON payload
     local payload = json.decode(payload_json)
     if not payload then
+        txn:set_var("txn.is_admin", "false")
         return false
     end
     
@@ -58,13 +63,15 @@ function validate_admin_jwt(txn)
     if realm_access and realm_access.roles then
         for _, role in ipairs(realm_access.roles) do
             if role == "admin" then
+                txn:set_var("txn.is_admin", "true")
                 return true
             end
         end
     end
     
+    txn:set_var("txn.is_admin", "false")
     return false
 end
 
--- Register the function
-core.register_fetches("validate_admin_jwt", validate_admin_jwt)
+-- Register the function as a converter
+core.register_converters("validate_admin_jwt", validate_admin_jwt)
