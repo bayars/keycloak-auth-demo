@@ -1,19 +1,9 @@
 from jose import jwt, JWTError
 from fastapi import HTTPException, Security
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-import httpx
-from .config import settings
-from typing import Dict, List
+from typing import Dict
 
 security = HTTPBearer()
-
-async def get_keycloak_public_key() -> Dict:
-    """Fetch Keycloak public keys for JWT verification"""
-    async with httpx.AsyncClient() as client:
-        response = await client.get(
-            f"{settings.keycloak_url}/realms/{settings.keycloak_realm}/protocol/openid-connect/certs"
-        )
-        return response.json()
 
 def decode_token(token: str) -> Dict:
     """Decode JWT token without verification (HAProxy already validated)"""
@@ -41,17 +31,3 @@ async def require_admin(credentials: HTTPAuthorizationCredentials = Security(sec
         raise HTTPException(status_code=403, detail="Admin access required")
     
     return payload
-
-async def get_admin_token() -> str:
-    """Get admin token for Keycloak management API calls"""
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            f"{settings.keycloak_url}/realms/master/protocol/openid-connect/token",
-            data={
-                "client_id": "admin-cli",
-                "grant_type": "password",
-                "username": "admin",
-                "password": "admin"
-            }
-        )
-        return response.json()["access_token"]

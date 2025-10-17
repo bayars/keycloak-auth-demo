@@ -1,18 +1,16 @@
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-import httpx
 from typing import Dict
 
-from .config import settings
 from .models import (
     UserInfo, ErrorResponse
 )
-from .auth import get_current_user, require_admin, decode_token, get_admin_token
+from .auth import get_current_user, require_admin
 
 app = FastAPI(
     title="Lab Test2 API",
-    description="API with Keycloak authentication",
+    description="API with JWT authentication (validated by HAProxy)",
     version="1.0.0"
 )
 
@@ -59,36 +57,8 @@ async def dashboard(current_user: Dict = Depends(get_current_user)):
     return {
         "message": f"Welcome to the dashboard, {current_user.get('preferred_username')}!",
         "user": current_user.get("preferred_username"),
-        "roles": current_user.get("roles", [])
+        "roles": current_user.get("realm_access", {}).get("roles", [])
     }
-
-@app.get("/api/admin/users")
-async def list_users(admin_user: Dict = Depends(require_admin)):
-    """
-    Admin endpoint - list all users
-    """
-    try:
-        admin_token = await get_admin_token()
-        
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{settings.keycloak_url}/admin/realms/{settings.keycloak_realm}/users",
-                headers={"Authorization": f"Bearer {admin_token}"}
-            )
-            
-            if response.status_code == 200:
-                return response.json()
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Failed to fetch users"
-                )
-                
-    except httpx.HTTPError as e:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Keycloak service unavailable: {str(e)}"
-        )
 
 # Error handlers
 @app.exception_handler(HTTPException)
