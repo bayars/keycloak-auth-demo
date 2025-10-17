@@ -103,9 +103,22 @@ test_frontend_access() {
     response=$(curl -k -s -I -H "Host: lab-test2.safa.nisvcg.comp.net" https://localhost/)
     
     if echo "$response" | grep -q "302 Found"; then
-        print_success "Frontend correctly redirects to Keycloak authentication"
+        print_success "Frontend correctly redirects to webauth authentication page"
     else
-        print_error "Frontend should redirect to Keycloak authentication"
+        print_error "Frontend should redirect to webauth authentication page"
+        return 1
+    fi
+}
+
+test_webauth_page() {
+    print_status "Testing webauth page access..."
+    
+    response=$(curl -k -s -H "Host: lab-test2.safa.nisvcg.comp.net" https://localhost/webauth)
+    
+    if echo "$response" | grep -q "Authentication Required"; then
+        print_success "WebAuth page is accessible and shows authentication interface"
+    else
+        print_error "WebAuth page access failed or incorrect content"
         return 1
     fi
 }
@@ -132,10 +145,10 @@ main() {
     echo ""
     echo "This test verifies the new architecture where:"
     echo "1. Users go directly to HAProxy"
-    echo "2. HAProxy redirects to Keycloak web authentication page"
-    echo "3. Keycloak handles login and password changes"
-    echo "4. Frontend exchanges authorization code for tokens"
-    echo "5. No custom login page - uses Keycloak's native interface"
+    echo "2. HAProxy redirects to webauth authentication page"
+    echo "3. WebAuth page handles Keycloak integration"
+    echo "4. Keycloak handles login and password changes"
+    echo "5. Frontend exchanges authorization code for tokens"
     echo ""
     
     # Run tests
@@ -145,6 +158,7 @@ main() {
     test_keycloak_login_page
     test_api_without_auth
     test_frontend_access
+    test_webauth_page
     test_haproxy_routing
     
     echo ""
@@ -152,7 +166,8 @@ main() {
     echo ""
     echo "🌐 Access URLs:"
     echo "==============="
-    echo "App Root:        https://lab-test2.safa.nisvcg.comp.net (redirects to Keycloak)"
+    echo "App Root:        https://lab-test2.safa.nisvcg.comp.net (redirects to webauth)"
+    echo "WebAuth Page:    https://lab-test2.safa.nisvcg.comp.net/webauth"
     echo "Keycloak Login:  https://lab-test2.safa.nisvcg.comp.net/auth/realms/myrealm/protocol/openid-connect/auth"
     echo "Keycloak Admin:  https://lab-test2.safa.nisvcg.comp.net/auth/admin/master/console"
     echo ""
@@ -163,11 +178,11 @@ main() {
     echo ""
     echo "📝 Notes:"
     echo "=========="
-    echo "- Users are automatically redirected to Keycloak's web authentication page"
-    echo "- No custom login page - uses Keycloak's native interface"
+    echo "- Users are redirected to a custom webauth authentication page"
+    echo "- WebAuth page provides a clean interface for Keycloak integration"
     echo "- Password changes are handled by Keycloak directly"
     echo "- The API no longer provides login endpoints"
-    echo "- HAProxy handles all authentication routing"
+    echo "- HAProxy handles all authentication routing dynamically"
     echo ""
 }
 

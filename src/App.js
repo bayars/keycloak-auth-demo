@@ -5,6 +5,7 @@ import { CssBaseline, CircularProgress, Box } from '@mui/material';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import DashboardPage from './pages/DashboardPage';
 import CallbackPage from './pages/CallbackPage';
+import WebAuthPage from './pages/WebAuthPage';
 
 // Create Material-UI theme
 const theme = createTheme({
@@ -50,6 +51,9 @@ const AppContent = () => {
     <Router>
       <CssBaseline />
       <Routes>
+        {/* WebAuth page for authentication */}
+        <Route path="/webauth" element={<WebAuthPage />} />
+        
         {/* Callback route for OAuth return */}
         <Route path="/callback" element={<CallbackPage />} />
         
@@ -63,7 +67,7 @@ const AppContent = () => {
           }
         />
         
-        {/* Default route - will be handled by HAProxy redirect to Keycloak */}
+        {/* Default route - will be handled by HAProxy redirect to webauth */}
         <Route path="/" element={<div>Redirecting to authentication...</div>} />
         
         {/* Catch all route */}
