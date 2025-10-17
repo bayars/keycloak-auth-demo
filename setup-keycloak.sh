@@ -71,9 +71,19 @@ create_realm() {
 create_client() {
     print_status "Creating client 'myapp'..."
     
-    docker exec keycloak /opt/keycloak/bin/kcadm.sh create clients -r myrealm -s clientId=myapp -s enabled=true -s 'redirectUris=["https://localhost/*", "https://lab-test2.safa.nisvcg.comp.net/*"]' -s 'webOrigins=["https://localhost", "https://lab-test2.safa.nisvcg.comp.net"]' -s publicClient=true
+    docker exec keycloak /opt/keycloak/bin/kcadm.sh create clients -r myrealm \
+        -s clientId=myapp \
+        -s enabled=true \
+        -s 'redirectUris=["https://localhost/*", "https://lab-test2.safa.nisvcg.comp.net/*", "https://localhost/callback", "https://lab-test2.safa.nisvcg.comp.net/callback"]' \
+        -s 'webOrigins=["https://localhost", "https://lab-test2.safa.nisvcg.comp.net"]' \
+        -s publicClient=true \
+        -s standardFlowEnabled=true \
+        -s implicitFlowEnabled=false \
+        -s directAccessGrantsEnabled=false \
+        -s serviceAccountsEnabled=false \
+        -s authorizationEnabled=false
     
-    print_success "Client 'myapp' created"
+    print_success "Client 'myapp' created with authorization code flow"
 }
 
 # Create admin role

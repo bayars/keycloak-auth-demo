@@ -24,31 +24,72 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (token) {
-      // Set axios default header
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      
-      // Verify token and get user info
+    // Check if we're returning from Keycloak authentication
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+    const state = urlParams.get('state');
+    
+    if (code && state) {
+      // We're returning from Keycloak, exchange code for token
+      exchangeCodeForToken(code, state);
+    } else if (token) {
+      // We have a token, verify it
       verifyToken();
     } else {
+      // No token and no code - user needs to authenticate
+      // HAProxy will redirect them to Keycloak automatically
       setLoading(false);
     }
   }, [token]);
+
+  const exchangeCodeForToken = async (code, state) => {
+    try {
+      setLoading(true);
+      
+      // Exchange authorization code for access token
+      const formData = new URLSearchParams();
+      formData.append('grant_type', 'authorization_code');
+      formData.append('client_id', 'myapp');
+      formData.append('code', code);
+      formData.append('redirect_uri', `${window.location.origin}/callback`);
+      
+      const response = await axios.post('/auth/realms/myrealm/protocol/openid-connect/token', formData, {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        }
+      });
+
+      const { access_token, refresh_token, expires_in } = response.data;
+      
+      // Store tokens
+      setToken(access_token);
+      localStorage.setItem('access_token', access_token);
+      localStorage.setItem('refresh_token', refresh_token);
+      localStorage.setItem('token_expires', Date.now() + (expires_in * 1000));
+      
+      // Set axios default header
+      axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
+      
+      // Get user info
+      await verifyToken();
+      
+      // Clean up URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+      
+    } catch (error) {
+      console.error('Token exchange failed:', error);
+      logout();
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const verifyToken = async () => {
     try {
       const response = await axios.get('/api/user/me');
       console.log('DEBUG: User info from API:', response.data);
       
-      // Preserve must_change_password flag if it exists
-      setUser(prevUser => {
-        const newUserData = response.data;
-        if (prevUser && prevUser.must_change_password !== undefined) {
-          newUserData.must_change_password = prevUser.must_change_password;
-        }
-        console.log('DEBUG: Setting user in verifyToken:', newUserData);
-        return newUserData;
-      });
+      setUser(response.data);
     } catch (error) {
       console.error('Token verification failed:', error);
       logout();
@@ -57,88 +98,24 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const login = async (username, password) => {
-    try {
-      const response = await axios.post('/api/login', {
-        username,
-        password
-      });
-      
-      const { access_token, roles, must_change_password } = response.data;
-      
-      // If must_change_password is true, we don't have a valid token yet
-      if (must_change_password) {
-        // Create a minimal user object for password change flow
-        const userData = {
-          username: username,
-          must_change_password: true,
-          roles: roles || []
-        };
-        console.log('DEBUG: Setting user data for password change:', userData);
-        console.log('DEBUG: About to set user state...');
-        setUser(userData);
-        console.log('DEBUG: User state set, returning success');
-        return { success: true, must_change_password: true };
-      }
-      
-      // Only proceed with token and user info if password change is not required
-      setToken(access_token);
-      localStorage.setItem('access_token', access_token);
-      axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
-      
-      console.log('DEBUG: Token set, calling /api/user/me');
-      // Get user info
-      const userResponse = await axios.get('/api/user/me');
-      const userData = {
-        ...userResponse.data,
-        must_change_password,
-        roles
-      };
-      console.log('DEBUG: Setting user data:', userData);
-      
-      // Set user data BEFORE returning
-      setUser(userData);
-      
-      // Add a small delay to ensure the state is properly set before navigation
-      await new Promise(resolve => setTimeout(resolve, 200));
-      
-      return { success: true, must_change_password };
-    } catch (error) {
-      console.error('Login failed:', error);
-      return { 
-        success: false, 
-        error: error.response?.data?.error || 'Login failed' 
-      };
-    }
-  };
-
-  const changePassword = async (oldPassword, newPassword, confirmPassword) => {
-    try {
-      await axios.post('/api/change-password', {
-        username: user.username,
-        old_password: oldPassword,
-        new_password: newPassword,
-        confirm_password: confirmPassword
-      });
-      
-      // Update user to remove must_change_password flag
-      setUser(prev => ({ ...prev, must_change_password: false }));
-      
-      return { success: true };
-    } catch (error) {
-      console.error('Password change failed:', error);
-      return { 
-        success: false, 
-        error: error.response?.data?.error || 'Password change failed' 
-      };
-    }
+  const login = () => {
+    // Redirect to Keycloak login - this will be handled by HAProxy redirect
+    // Users will be automatically redirected to Keycloak when they visit the app
+    window.location.href = '/';
   };
 
   const logout = () => {
     setToken(null);
     setUser(null);
     localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+    localStorage.removeItem('token_expires');
+    localStorage.removeItem('oauth_state');
     delete axios.defaults.headers.common['Authorization'];
+    
+    // Redirect to Keycloak logout
+    const logoutUrl = `${API_BASE_URL}/auth/realms/myrealm/protocol/openid-connect/logout?client_id=myapp&post_logout_redirect_uri=${encodeURIComponent(window.location.origin)}`;
+    window.location.href = logoutUrl;
   };
 
   const value = {
@@ -146,9 +123,8 @@ export const AuthProvider = ({ children }) => {
     token,
     loading,
     login,
-    changePassword,
     logout,
-    isAuthenticated: !!user && (!!token || user.must_change_password),
+    isAuthenticated: !!user && !!token,
     isAdmin: user?.roles?.includes('admin') || false
   };
 

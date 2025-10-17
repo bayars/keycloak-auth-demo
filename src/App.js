@@ -3,9 +3,8 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { CssBaseline, CircularProgress, Box } from '@mui/material';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import LoginPage from './pages/LoginPage';
-import ChangePasswordPage from './pages/ChangePasswordPage';
 import DashboardPage from './pages/DashboardPage';
+import CallbackPage from './pages/CallbackPage';
 
 // Create Material-UI theme
 const theme = createTheme({
@@ -41,81 +40,8 @@ const ProtectedRoute = ({ children }) => {
     );
   }
   
-  return isAuthenticated ? children : <Navigate to="/login" replace />;
-};
-
-// Password Change Route component
-const PasswordChangeRoute = ({ children }) => {
-  const { isAuthenticated, loading, user } = useAuth();
-  
-  console.log('DEBUG PasswordChangeRoute:', { isAuthenticated, loading, user });
-  console.log('DEBUG PasswordChangeRoute - user.must_change_password:', user?.must_change_password);
-  console.log('DEBUG PasswordChangeRoute - isAuthenticated calculation:', !!user && (!!user.token || user?.must_change_password));
-  
-  if (loading) {
-    console.log('DEBUG: Still loading, showing spinner');
-    return (
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          height: '100vh',
-        }}
-      >
-        <CircularProgress />
-      </Box>
-    );
-  }
-  
-  if (!isAuthenticated) {
-    console.log('DEBUG: Not authenticated, redirecting to login');
-    return <Navigate to="/login" replace />;
-  }
-  
-  // If user object is not ready yet, show loading
-  if (!user) {
-    console.log('DEBUG: User object not ready, showing loading');
-    return (
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          height: '100vh',
-        }}
-      >
-        <CircularProgress />
-      </Box>
-    );
-  }
-  
-  // Show password change page if user exists and must_change_password is true
-  if (user.must_change_password === true) {
-    console.log('DEBUG: Showing password change page - must_change_password is true');
-    return children;
-  }
-  
-  // Only redirect to dashboard if we're sure the user doesn't need password change
-  if (user.must_change_password === false) {
-    console.log('DEBUG: Password change not required, redirecting to dashboard');
-    return <Navigate to="/dashboard" replace />;
-  }
-  
-  // Fallback: if must_change_password is undefined or null, show loading
-  console.log('DEBUG: must_change_password is undefined/null, showing loading');
-  return (
-    <Box
-      sx={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        height: '100vh',
-      }}
-    >
-      <CircularProgress />
-    </Box>
-  );
+  // If not authenticated, redirect to root which will trigger HAProxy redirect to Keycloak
+  return isAuthenticated ? children : <Navigate to="/" replace />;
 };
 
 // Main App component
@@ -124,19 +50,10 @@ const AppContent = () => {
     <Router>
       <CssBaseline />
       <Routes>
-        {/* Public routes */}
-        <Route path="/login" element={<LoginPage />} />
+        {/* Callback route for OAuth return */}
+        <Route path="/callback" element={<CallbackPage />} />
         
         {/* Protected routes */}
-        <Route
-          path="/change-password"
-          element={
-            <PasswordChangeRoute>
-              <ChangePasswordPage />
-            </PasswordChangeRoute>
-          }
-        />
-        
         <Route
           path="/dashboard"
           element={
@@ -146,11 +63,11 @@ const AppContent = () => {
           }
         />
         
-        {/* Default redirect */}
-        <Route path="/" element={<Navigate to="/login" replace />} />
+        {/* Default route - will be handled by HAProxy redirect to Keycloak */}
+        <Route path="/" element={<div>Redirecting to authentication...</div>} />
         
         {/* Catch all route */}
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
   );
